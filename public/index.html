@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Room Reservation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-8">Meeting Room Booking</h1>
+        
+        <!-- Room Selection -->
+		<div id="rooms-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+				<!-- Rooms will be generated here by JavaScript -->
+		</div>
+
+        <!-- Booking Form (Hidden by default) -->
+        <div id="bookingForm" class="hidden bg-white p-8 rounded-lg shadow-lg max-w-md mx-auto">
+            <h3 id="selectedRoomTitle" class="text-xl font-bold mb-4"></h3>
+            <div class="space-y-4">
+                <input type="hidden" id="roomId">
+                <input type="text" id="userName" placeholder="Your Name" class="w-full border p-2 rounded">
+                <div>
+                    <label class="block text-sm text-gray-600">Start Time</label>
+                    <input type="datetime-local" id="startTime" class="w-full border p-2 rounded">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600">End Time</label>
+                    <input type="datetime-local" id="endTime" class="w-full border p-2 rounded">
+                </div>
+                <button onclick="submitBooking()" class="w-full bg-gray-800 text-white py-3 rounded font-bold">Confirm Reservation</button>
+                <button onclick="hideForm()" class="w-full text-gray-500 text-sm">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+	async function renderRooms() {
+    try {
+        const roomsResponse = await fetch('/api/rooms');
+        const rooms = await roomsResponse.json();
+        
+        // Get current Month and Year for the title
+        const now = new Date();
+        const monthYearLabel = now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+
+        const grid = document.getElementById('rooms-grid');
+        grid.innerHTML = ''; 
+
+        for (const room of rooms) {
+            const schedRes = await fetch(`/api/room/${room.id}/schedule`);
+            const schedule = await schedRes.json();
+
+            const scheduleHtml = schedule.length > 0 
+                ? schedule.map(b => {
+                    const dateObj = new Date(b.start_time);
+                    const day = dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                    const startTime = b.start_time.split('T')[1].substring(0, 5);
+                    const endTime = b.end_time.split('T')[1].substring(0, 5);
+                    
+                    return `<div class="border-b border-gray-100 py-1">
+                                <span class="font-bold text-blue-600">${day}</span> | 
+                                ${startTime} - ${endTime} (${b.user_name})
+                            </div>`;
+                }).join('')
+                : `<div class="text-gray-400 italic">No upcoming bookings</div>`;
+
+            grid.innerHTML += `
+                <div class="bg-white p-6 rounded-lg shadow-md border-t-4 border-blue-500">
+                    <h2 class="text-xl font-semibold">${room.name}</h2>
+                    <p class="text-gray-500 mb-2">Capacity: ${room.capacity}</p>
+                    <div class="text-sm bg-gray-50 p-2 rounded mb-4 overflow-y-auto max-h-40">
+                        <strong class="text-gray-700">${monthYearLabel} Schedule:</strong>
+                        <div class="mt-1 text-xs text-gray-600">${scheduleHtml}</div>
+                    </div>
+                    <button onclick="selectRoom(${room.id}, '${room.name}')" 
+                            class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600">
+                        Book This Room
+                    </button>
+                </div>`;
+        }
+    } catch (err) {
+        console.error("Load Error:", err);
+    }
+}
+
+    function selectRoom(id, name) {
+        document.getElementById('roomId').value = id;
+        document.getElementById('selectedRoomTitle').innerText = "Booking " + name;
+        document.getElementById('bookingForm').classList.remove('hidden');
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
+
+    async function submitBooking() {
+        const data = {
+            roomId: parseInt(document.getElementById('roomId').value),
+            user: document.getElementById('userName').value,
+            start: document.getElementById('startTime').value,
+            end: document.getElementById('endTime').value
+        };
+
+        const response = await fetch('/api/reserve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            alert("Success! Room reserved.");
+            document.getElementById('bookingForm').classList.add('hidden');
+            // THIS REFRESHES THE DATA WITHOUT RELOADING THE PAGE
+            renderRooms(); 
+        } else {
+            alert("Error: " + result.message);
+        }
+    }
+
+    renderRooms();
+</script>
+</body>
+</html>
